@@ -1,5 +1,5 @@
 import random
-import protocol
+from protocol import dbg 
 
 class TYPE:
     UNKNOWN    = 0
@@ -121,13 +121,20 @@ class Cards:
             return TYPE.UNKNOWN, -1
 
     def check(self, pre_cards: list, now_cards: list) -> bool:
-        pre_type, pre_mc = self.checkType(pre_cards)
+        if len(now_cards) == 0: return 1
         now_type, now_mc = self.checkType(now_cards)
+
+        if len(pre_cards) == 0: return now_type != TYPE.UNKNOWN
+        pre_type, pre_mc = self.checkType(pre_cards)
+
         if len(pre_cards) != len(now_cards) or now_type == TYPE.UNKNOWN: return 0
         def suit(x: int): return x//13
         def point(x: int): return x%13
-        return pre_type < now_type or pre_type == now_type \
+        ret = pre_type < now_type or pre_type == now_type \
             and (point(pre_mc) < point(now_mc) or point(pre_mc) == point(now_mc) and suit(pre_mc)< suit(now_mc))
+
+        # if dbg and ret: print("check ok", pre_cards, now_cards)
+        return ret
 
 if __name__ == "__main__":
     while 1:

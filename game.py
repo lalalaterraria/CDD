@@ -15,9 +15,44 @@ class Game:
         self.playerCounter = 0
         self.player = [None, None, None, None]
         self.started = 0
-        self.finish = 0
+        self.now_player = 0
+        self.pass_cnt = 0
+        self.pre_cards = []
 
-    def start(self) -> bool:
+    def game_over(self, ind):
+        with lock:
+            print("winner", ind)
+
+    def next_player(self, now_cards: list):
+        with lock:
+            ok = self.cards.check(self.pre_cards, now_cards)
+            if(dbg): print("player/AI", self.now_player, "display", now_cards, ("ok" if ok else "not ok"))
+            if not ok:
+                t = Thread(target = self.player[self.now_player].play, args = ((len(self.pre_cards) != 0) | 2,))
+                t.start()
+            else:
+
+                if dbg:
+                    for i in range(0,4):
+                        print("player", i, self.player[i].card)
+                    print("---------------------------------------------")
+                    print()
+                    print("---------------------------------------------")
+
+                for p in self.player: p.display(self.now_player, now_cards)
+                if len(now_cards) == 0:
+                    self.pass_cnt += 1
+                    # 三人pass，则大者继续出牌
+                    if self.pass_cnt == 3: self.pass_cnt, self.pre_cards = 0, []
+                else:
+                    self.pass_cnt = 0
+                    self.pre_cards = now_cards
+                
+                self.now_player = (self.now_player + 1) % 4
+                t = Thread(target = self.player[self.now_player].play, args = (len(self.pre_cards) != 0,))
+                t.start()
+
+    def start(self):
         with lock:
             if not self.started and self.playerCounter == 4:
                 self.started = 1
@@ -30,13 +65,14 @@ class Game:
             deal = self.cards.deal()
             for i in range(0,4):
                 self.player[i].getCards(deal[i])
-                print("player", i, deal[i])
+                if dbg: print("player", i, deal[i])
 
-            # UTF-8编码，0-127都是单字节
-            t = Thread(target = self.player[0].play(3,[127,127,127,127,127]))
-            t.start()
+            self.now_player = 0            
+            self.pass_cnt = 0
+            self.pre_cards = []
+            self.player[0].play(0)
 
-    def addPlayer(self, Player, socket = None) -> bool:
+    def addPlayer(self, Player, socket = None):
         with lock:
             ind = -1
             for i, p in enumerate(self.player):
@@ -93,9 +129,11 @@ class ServerSocket(BaseRequestHandler):
         while 1:
             try:
 
-                s = self.request.recv(1024).decode('UTF-8')[2:]
+                r = self.request.recv(1024)
+                print("recv", self.client_address, r)
+
+                s = r.decode('UTF-8')[2:]
                 if not s: break
-                print(self.client_address, s.encode())
 
                 if s[0] == Protocol.加入游戏:
 
@@ -119,6 +157,12 @@ class ServerSocket(BaseRequestHandler):
                         if isinstance(p,AI):
                             g.delPlayer(3-i)
                             break
+
+                elif s[0] == Protocol.开始出牌:
+                    # 安卓标准库内鬼ascll0编码为\xc0\x80
+                    # 所以将0临时编码为52，这里转换回来
+                    cards = [ord(i)%52 for i in s][1:]
+                    g.next_player(cards)
 
                 if not g.started:
                     g.start()
