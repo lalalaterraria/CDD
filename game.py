@@ -1,4 +1,4 @@
-from cards import Cards
+from cards import Cards,TYPE
 from player import Player, AI
 from socketserver import ThreadingTCPServer
 from socketserver import BaseRequestHandler
@@ -47,19 +47,20 @@ class Game:
 
                 if dbg:
                     for i in range(0,4):
-                        print("player", i, self.player[i].card)
+                        c = [TYPE.suit[j//13] + str(TYPE.point[j%13]) for j in self.player[i].card]
+                        print("player", i, c)
                     print("---------------------------------------------")
                     print()
                     print("---------------------------------------------")
 
-                over_flg = 0
+                over_flg = -1
 
-                for p in self.player: 
+                for i,p in enumerate(self.player): 
                     if p.display(self.now_player, now_cards):
-                        over_flg = 1
+                        over_flg = i
 
-                if over_flg:
-                    self.game_over(i)
+                if over_flg != -1:
+                    self.game_over(over_flg)
                     return
 
                 if len(now_cards) == 0:
