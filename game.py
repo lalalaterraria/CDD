@@ -5,7 +5,7 @@ from socketserver import BaseRequestHandler
 from protocol import Protocol, dbg
 from threading import Thread, Lock
 from time import sleep
-
+from random import randint
 lock = Lock() # 同时只能有一个线程操作g
 
 class Game:
@@ -18,10 +18,23 @@ class Game:
         self.now_player = 0
         self.pass_cnt = 0
         self.pre_cards = []
+        self.game_args = [0, 0, 0]
+    
+    def set_args(self, args):
+        with lock:
+            # 顶大暂不实现
+            self.game_args = args
+            if dbg: print("设置参数",
+                        "方块三" if not args[0] else "随机",
+                        "不顶大" if not args[1] else "顶大",
+                        "困难" if not args[2] else "简单")
 
     def game_over(self, ind):
-        with lock:
-            print("winner", ind)
+        print("winner", ind)
+        for p in self.player:
+            if type(p) == Player:
+                p.game_over(ind)
+        self.started = 0
 
     def next_player(self, now_cards: list):
         with lock:
@@ -39,7 +52,16 @@ class Game:
                     print()
                     print("---------------------------------------------")
 
-                for p in self.player: p.display(self.now_player, now_cards)
+                over_flg = 0
+
+                for p in self.player: 
+                    if p.display(self.now_player, now_cards):
+                        over_flg = 1
+
+                if over_flg:
+                    self.game_over(i)
+                    return
+
                 if len(now_cards) == 0:
                     self.pass_cnt += 1
                     # 三人pass，则大者继续出牌
@@ -62,15 +84,23 @@ class Game:
             if dbg: print("game start")
 
             self.cards.shuffle()
-            deal = self.cards.deal()
+            deal = self.cards.deal() 
             for i in range(0,4):
                 self.player[i].getCards(deal[i])
                 if dbg: print("player", i, deal[i])
-
-            self.now_player = 0            
+         
             self.pass_cnt = 0
             self.pre_cards = []
-            self.player[0].play(0)
+
+            ind = -1
+            if self.game_args[0] == 0:
+                for i, p in enumerate(self.player):
+                    for c in p.card:
+                        if c == 0: ind = i
+            else: ind = randint(0,3)
+
+            self.now_player = ind   
+            self.player[ind].play(0)
 
     def addPlayer(self, Player, socket = None):
         with lock:
@@ -96,7 +126,6 @@ class Game:
     def delPlayer(self, ind: int):
         with lock:
             if g.started and type(self.player[ind]) == AI: return
-            g.started = 0
             self.player[ind] = None
 
             for p in self.player:
@@ -109,8 +138,15 @@ class Game:
             for p in self.player:
                 if type(p) == Player: clr_flg = 0
             if clr_flg:
+                if dbg: print("cleared AI for no online player")
                 self.player = [None, None, None, None]
                 self.playerCounter = 0
+
+            if self.started:
+                for p in self.player:
+                    if type(p) == Player:
+                        p.game_over(127)
+                self.started = 0
 
             if dbg:
                 print("delPlayer", ind)
@@ -146,9 +182,12 @@ class ServerSocket(BaseRequestHandler):
                         for p in ret[1]: data += (chr(0) if p == None else chr(1))
                         self.request.sendall(data.encode())
 
+                    g.start()
+
                 elif s[0] == Protocol.添加电脑:
                     g.addPlayer(AI, None)
-                        
+                    g.start()
+
                 elif s[0] == Protocol.退出游戏:
                     g.delPlayer(int(s[1]))
 
@@ -164,11 +203,15 @@ class ServerSocket(BaseRequestHandler):
                     cards = [ord(i)%52 for i in s][1:]
                     g.next_player(cards)
 
-                if not g.started:
+                elif s[0] == Protocol.开始游戏:
                     g.start()
 
+                elif s[0] == Protocol.设置规则:
+                    g.set_args([int(i) for i in s[1:]])
+
             except Exception as e:
-                print(e)
+                import traceback
+                traceback.print_exc()
                 break
 
 
@@ -178,4 +221,3 @@ if __name__ == "__main__":
     server = ThreadingTCPServer((host,port),ServerSocket)
     print("初始化完毕，等待连接")
     server.serve_forever()
-

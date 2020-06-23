@@ -82,7 +82,7 @@ class Cards:
 
         if len(cards) == 2:
             if same(list(map(point, cards))):
-                return TYPE.TWO, cards[0]
+                return TYPE.TWO, cards[1]
             else:
                 return TYPE.UNKNOWN, -1
             
